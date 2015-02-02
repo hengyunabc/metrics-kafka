@@ -161,9 +161,11 @@ public class KafkaReporter extends ScheduledReporter {
 		public KafkaReporter build() {
 			if (hostName == null) {
 				hostName = HostUtil.getHostName();
+				logger.info(name + " detect hostName: " + hostName);
 			}
 			if (ip == null) {
 				ip = HostUtil.getHostAddress();
+				logger.info(name + " detect ip: " + ip);
 			}
 
 			return new KafkaReporter(registry, name, rateUnit, durationUnit,
