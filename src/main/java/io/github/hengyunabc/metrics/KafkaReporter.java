@@ -13,7 +13,6 @@ import kafka.producer.ProducerConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
@@ -25,14 +24,10 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.ScheduledReporter;
 import com.codahale.metrics.Snapshot;
 import com.codahale.metrics.Timer;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 public class KafkaReporter extends ScheduledReporter {
 	private static final Logger logger = LoggerFactory
 			.getLogger(KafkaReporter.class);
-
-	int queueSize = 1000;
-	// EvictingQueue<String> metricsQueue = EvictingQueue.create(queueSize);
 
 	String topic;
 	ProducerConfig config;
@@ -176,6 +171,32 @@ public class KafkaReporter extends ScheduledReporter {
 		}
 	}
 
+	private JSONObject snapshotToJSONObject(Snapshot snapshot){
+		JSONObject result = new JSONObject(16);
+		result.put("min", snapshot.getMin());
+		result.put("max", snapshot.getMax());
+		result.put("mean", snapshot.getMean());
+		result.put("stddev", snapshot.getStdDev());
+		result.put("median", snapshot.getMedian());
+		result.put("75%", snapshot.get75thPercentile());
+		result.put("95%", snapshot.get95thPercentile());
+		result.put("98%", snapshot.get98thPercentile());
+		result.put("99%", snapshot.get99thPercentile());
+		result.put("99.9%", snapshot.get999thPercentile());
+		return result;
+	}
+	
+	private JSONObject meterToJSONObject(Metered meter){
+		JSONObject result = new JSONObject(16);
+		result.put("count", meter.getCount());
+		result.put("meanRate", meter.getMeanRate());
+		result.put("1-minuteRate", meter.getOneMinuteRate());
+		result.put("5-minuteRate", meter.getFiveMinuteRate());
+		result.put("15-minuteRate",meter.getFifteenMinuteRate());
+		return result;
+	}
+	
+	@SuppressWarnings("unused")
 	private void addSnapshotJSONObject(String key, Snapshot snapshot,
 			JSONObject result) {
 		result.put(prefix + key + ".min", snapshot.getMin());
@@ -190,14 +211,14 @@ public class KafkaReporter extends ScheduledReporter {
 		result.put(prefix + key + ".99.9%", snapshot.get999thPercentile());
 	}
 
+	@SuppressWarnings("unused")
 	private void addSnapshotJSONObject(String key, Metered meter,
 			JSONObject result) {
 		result.put(prefix + key + ".count", meter.getCount());
 		result.put(prefix + key + ".meanRate", meter.getMeanRate());
 		result.put(prefix + key + ".1-minuteRate", meter.getOneMinuteRate());
 		result.put(prefix + key + ".5-minuteRate", meter.getFiveMinuteRate());
-		result.put(prefix + key + ".15-minuteRate",
-				meter.getFifteenMinuteRate());
+		result.put(prefix + key + ".15-minuteRate",meter.getFifteenMinuteRate());
 	}
 
 	@SuppressWarnings("rawtypes")
@@ -213,51 +234,41 @@ public class KafkaReporter extends ScheduledReporter {
 		result.put("reteUnit", getRateUnit());
 		result.put("durationUnit", getDurationUnit());
 
-		JSONArray gaugeArray = new JSONArray();
+		JSONObject gaugesJSONObject = new JSONObject();
 		for (Map.Entry<String, Gauge> entry : gauges.entrySet()) {
-			JSONObject gauge = new JSONObject();
-			gauge.put(prefix + entry.getKey(), entry.getValue().getValue()
+			gaugesJSONObject.put(prefix + entry.getKey(), entry.getValue().getValue()
 					.toString());
-			gaugeArray.add(gauge);
 		}
-		result.put("gauges", gaugeArray);
+		result.put("gauges", gaugesJSONObject);
 
-		JSONArray couterArray = new JSONArray();
+		JSONObject coutersJSONObject = new JSONObject();
 		for (Map.Entry<String, Counter> entry : counters.entrySet()) {
-			JSONObject couter = new JSONObject();
-			couter.put(prefix + entry.getKey(), entry.getValue().getCount());
-			couterArray.add(couter);
+			coutersJSONObject.put(prefix + entry.getKey(), entry.getValue().getCount());
 		}
-		result.put("couters", couterArray);
+		result.put("couters", coutersJSONObject);
 
-		JSONArray histogramArray = new JSONArray();
+		JSONObject histogramsJSONObject = new JSONObject();
 		for (Map.Entry<String, Histogram> entry : histograms.entrySet()) {
 			Histogram histogram = entry.getValue();
 			Snapshot snapshot = histogram.getSnapshot();
-			JSONObject object = new JSONObject();
-			addSnapshotJSONObject(entry.getKey(), snapshot, object);
-			histogramArray.add(object);
+			histogramsJSONObject.put(prefix + entry.getKey(), snapshotToJSONObject( snapshot));
 		}
-		result.put("histograms", histogramArray);
+		result.put("histograms", histogramsJSONObject);
 
-		JSONArray meterArray = new JSONArray();
+		JSONObject metersJSONObject = new JSONObject();
 		for (Map.Entry<String, Meter> entry : meters.entrySet()) {
-			Meter meter = entry.getValue();
-			JSONObject object = new JSONObject();
-			addSnapshotJSONObject(entry.getKey(), meter, object);
-			meterArray.add(object);
+			metersJSONObject.put(prefix + entry.getKey(), meterToJSONObject(entry.getValue()));
 		}
-		result.put("meters", meterArray);
+		result.put("meters", metersJSONObject);
 
-		JSONArray timerArray = new JSONArray();
+		JSONObject timersJSONObject = new JSONObject();
 		for (Map.Entry<String, Timer> entry : timers.entrySet()) {
 			Timer timer = entry.getValue();
-			JSONObject object = new JSONObject();
-			addSnapshotJSONObject(entry.getKey(), timer, object);
-			addSnapshotJSONObject(entry.getKey(), timer.getSnapshot(), object);
-			timerArray.add(object);
+			JSONObject timerJSONObjet = meterToJSONObject(timer);
+			timerJSONObjet.putAll(snapshotToJSONObject(timer.getSnapshot()));
+			timersJSONObject.put(prefix + entry.getKey(), timerJSONObjet);
 		}
-		result.put("timers", timerArray);
+		result.put("timers", timersJSONObject);
 
 		kafkaExecutor.execute(new Runnable() {
 			@Override
