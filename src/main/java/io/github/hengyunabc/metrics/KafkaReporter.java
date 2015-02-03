@@ -29,6 +29,12 @@ public class KafkaReporter extends ScheduledReporter {
 	private static final Logger logger = LoggerFactory
 			.getLogger(KafkaReporter.class);
 
+	/**
+	 * in some system, do not support '%', so will replace '%' to other string.
+	 * default is empty.
+	 */
+	String replacePercentSign = "";
+	
 	String topic;
 	ProducerConfig config;
 	Producer<String, String> producer;
@@ -38,11 +44,14 @@ public class KafkaReporter extends ScheduledReporter {
 	private String hostName;
 	private String ip;
 
-	private KafkaReporter(MetricRegistry registry, String name,
+	int count = 0;
+
+	private KafkaReporter(MetricRegistry registry, String replacePercentSign, String name,
 			TimeUnit rateUnit, TimeUnit durationUnit, MetricFilter filter,
 			String topic, ProducerConfig config, String prefix,
 			String hostName, String ip) {
 		super(registry, name, filter, rateUnit, durationUnit);
+		this.replacePercentSign = replacePercentSign;
 		this.topic = topic;
 		this.config = config;
 		this.prefix = prefix;
@@ -65,6 +74,8 @@ public class KafkaReporter extends ScheduledReporter {
 		private TimeUnit rateUnit;
 		private TimeUnit durationUnit;
 		private MetricFilter filter;
+		
+		private String replacePercentSign = "";
 
 		private String prefix = "";
 		private String hostName;
@@ -152,6 +163,11 @@ public class KafkaReporter extends ScheduledReporter {
 			this.ip = ip;
 			return this;
 		}
+		
+		public Builder replacePercentSign(String replacePercentSign) {
+			this.replacePercentSign = replacePercentSign;
+			return this;
+		}	
 
 		/**
 		 * Builds a {@link KafkaReporter} with the given properties.
@@ -168,36 +184,36 @@ public class KafkaReporter extends ScheduledReporter {
 				logger.info(name + " detect ip: " + ip);
 			}
 
-			return new KafkaReporter(registry, name, rateUnit, durationUnit,
+			return new KafkaReporter(registry, replacePercentSign, name, rateUnit, durationUnit,
 					filter, topic, config, prefix, hostName, ip);
 		}
 	}
 
-	private JSONObject snapshotToJSONObject(Snapshot snapshot){
+	private JSONObject snapshotToJSONObject(Snapshot snapshot) {
 		JSONObject result = new JSONObject(16);
 		result.put("min", snapshot.getMin());
 		result.put("max", snapshot.getMax());
 		result.put("mean", snapshot.getMean());
 		result.put("stddev", snapshot.getStdDev());
 		result.put("median", snapshot.getMedian());
-		result.put("75%", snapshot.get75thPercentile());
-		result.put("95%", snapshot.get95thPercentile());
-		result.put("98%", snapshot.get98thPercentile());
-		result.put("99%", snapshot.get99thPercentile());
-		result.put("99.9%", snapshot.get999thPercentile());
+		result.put("75" + replacePercentSign, snapshot.get75thPercentile());
+		result.put("95" + replacePercentSign, snapshot.get95thPercentile());
+		result.put("98" + replacePercentSign, snapshot.get98thPercentile());
+		result.put("99" + replacePercentSign, snapshot.get99thPercentile());
+		result.put("99.9" + replacePercentSign, snapshot.get999thPercentile());
 		return result;
 	}
-	
-	private JSONObject meterToJSONObject(Metered meter){
+
+	private JSONObject meterToJSONObject(Metered meter) {
 		JSONObject result = new JSONObject(16);
 		result.put("count", meter.getCount());
 		result.put("meanRate", meter.getMeanRate());
 		result.put("1-minuteRate", meter.getOneMinuteRate());
 		result.put("5-minuteRate", meter.getFiveMinuteRate());
-		result.put("15-minuteRate",meter.getFifteenMinuteRate());
+		result.put("15-minuteRate", meter.getFifteenMinuteRate());
 		return result;
 	}
-	
+
 	@SuppressWarnings("unused")
 	private void addSnapshotJSONObject(String key, Snapshot snapshot,
 			JSONObject result) {
@@ -206,11 +222,16 @@ public class KafkaReporter extends ScheduledReporter {
 		result.put(prefix + key + ".mean", snapshot.getMean());
 		result.put(prefix + key + ".stddev", snapshot.getStdDev());
 		result.put(prefix + key + ".median", snapshot.getMedian());
-		result.put(prefix + key + ".75%", snapshot.get75thPercentile());
-		result.put(prefix + key + ".95%", snapshot.get95thPercentile());
-		result.put(prefix + key + ".98%", snapshot.get98thPercentile());
-		result.put(prefix + key + ".99%", snapshot.get99thPercentile());
-		result.put(prefix + key + ".99.9%", snapshot.get999thPercentile());
+		result.put(prefix + key + ".75" + replacePercentSign,
+				snapshot.get75thPercentile());
+		result.put(prefix + key + ".95" + replacePercentSign,
+				snapshot.get95thPercentile());
+		result.put(prefix + key + ".98" + replacePercentSign,
+				snapshot.get98thPercentile());
+		result.put(prefix + key + ".99" + replacePercentSign,
+				snapshot.get99thPercentile());
+		result.put(prefix + key + ".99.9" + replacePercentSign,
+				snapshot.get999thPercentile());
 	}
 
 	@SuppressWarnings("unused")
@@ -220,7 +241,8 @@ public class KafkaReporter extends ScheduledReporter {
 		result.put(prefix + key + ".meanRate", meter.getMeanRate());
 		result.put(prefix + key + ".1-minuteRate", meter.getOneMinuteRate());
 		result.put(prefix + key + ".5-minuteRate", meter.getFiveMinuteRate());
-		result.put(prefix + key + ".15-minuteRate",meter.getFifteenMinuteRate());
+		result.put(prefix + key + ".15-minuteRate",
+				meter.getFifteenMinuteRate());
 	}
 
 	@SuppressWarnings("rawtypes")
@@ -238,14 +260,15 @@ public class KafkaReporter extends ScheduledReporter {
 
 		JSONObject gaugesJSONObject = new JSONObject();
 		for (Map.Entry<String, Gauge> entry : gauges.entrySet()) {
-			gaugesJSONObject.put(prefix + entry.getKey(), entry.getValue().getValue()
-					.toString());
+			gaugesJSONObject.put(prefix + entry.getKey(), entry.getValue()
+					.getValue().toString());
 		}
 		result.put("gauges", gaugesJSONObject);
 
 		JSONObject coutersJSONObject = new JSONObject();
 		for (Map.Entry<String, Counter> entry : counters.entrySet()) {
-			coutersJSONObject.put(prefix + entry.getKey(), entry.getValue().getCount());
+			coutersJSONObject.put(prefix + entry.getKey(), entry.getValue()
+					.getCount());
 		}
 		result.put("couters", coutersJSONObject);
 
@@ -253,13 +276,15 @@ public class KafkaReporter extends ScheduledReporter {
 		for (Map.Entry<String, Histogram> entry : histograms.entrySet()) {
 			Histogram histogram = entry.getValue();
 			Snapshot snapshot = histogram.getSnapshot();
-			histogramsJSONObject.put(prefix + entry.getKey(), snapshotToJSONObject( snapshot));
+			histogramsJSONObject.put(prefix + entry.getKey(),
+					snapshotToJSONObject(snapshot));
 		}
 		result.put("histograms", histogramsJSONObject);
 
 		JSONObject metersJSONObject = new JSONObject();
 		for (Map.Entry<String, Meter> entry : meters.entrySet()) {
-			metersJSONObject.put(prefix + entry.getKey(), meterToJSONObject(entry.getValue()));
+			metersJSONObject.put(prefix + entry.getKey(),
+					meterToJSONObject(entry.getValue()));
 		}
 		result.put("meters", metersJSONObject);
 
@@ -272,11 +297,13 @@ public class KafkaReporter extends ScheduledReporter {
 		}
 		result.put("timers", timersJSONObject);
 
+		result.put("clock", System.currentTimeMillis());
+
 		kafkaExecutor.execute(new Runnable() {
 			@Override
 			public void run() {
 				KeyedMessage<String, String> message = new KeyedMessage<String, String>(
-						topic, new Object().toString(), result.toJSONString());
+						topic, "" + count++, result.toJSONString());
 				try {
 					producer.send(message);
 				} catch (Exception e) {
