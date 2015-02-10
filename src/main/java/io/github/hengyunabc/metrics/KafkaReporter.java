@@ -189,6 +189,11 @@ public class KafkaReporter extends ScheduledReporter {
 		}
 	}
 
+	/**
+	 * for histogram.
+	 * @param snapshot
+	 * @return
+	 */
 	private JSONObject snapshotToJSONObject(Snapshot snapshot) {
 		JSONObject result = new JSONObject(16);
 		result.put("min", snapshot.getMin());
@@ -203,46 +208,35 @@ public class KafkaReporter extends ScheduledReporter {
 		result.put("99.9" + replacePercentSign, snapshot.get999thPercentile());
 		return result;
 	}
+	
+	/**
+	 * for timer.
+	 * @param snapshot
+	 * @return
+	 */
+	private JSONObject snapshotToJSONObjectWithConvertDuration(Snapshot snapshot) {
+		JSONObject result = new JSONObject(16);
+		result.put("min", convertDuration(snapshot.getMin()));
+		result.put("max", convertDuration(snapshot.getMax()));
+		result.put("mean", convertDuration(snapshot.getMean()));
+		result.put("stddev", convertDuration(snapshot.getStdDev()));
+		result.put("median", convertDuration(snapshot.getMedian()));
+		result.put("75" + replacePercentSign, convertDuration(snapshot.get75thPercentile()));
+		result.put("95" + replacePercentSign, convertDuration(snapshot.get95thPercentile()));
+		result.put("98" + replacePercentSign, convertDuration(snapshot.get98thPercentile()));
+		result.put("99" + replacePercentSign, convertDuration(snapshot.get99thPercentile()));
+		result.put("99.9" + replacePercentSign, convertDuration(snapshot.get999thPercentile()));
+		return result;
+	}
 
 	private JSONObject meterToJSONObject(Metered meter) {
 		JSONObject result = new JSONObject(16);
 		result.put("count", meter.getCount());
-		result.put("meanRate", meter.getMeanRate());
-		result.put("1-minuteRate", meter.getOneMinuteRate());
-		result.put("5-minuteRate", meter.getFiveMinuteRate());
-		result.put("15-minuteRate", meter.getFifteenMinuteRate());
+		result.put("meanRate", convertRate(meter.getMeanRate()));
+		result.put("1-minuteRate", convertRate(meter.getOneMinuteRate()));
+		result.put("5-minuteRate", convertRate(meter.getFiveMinuteRate()));
+		result.put("15-minuteRate", convertRate(meter.getFifteenMinuteRate()));
 		return result;
-	}
-
-	@SuppressWarnings("unused")
-	private void addSnapshotJSONObject(String key, Snapshot snapshot,
-			JSONObject result) {
-		result.put(prefix + key + ".min", snapshot.getMin());
-		result.put(prefix + key + ".max", snapshot.getMax());
-		result.put(prefix + key + ".mean", snapshot.getMean());
-		result.put(prefix + key + ".stddev", snapshot.getStdDev());
-		result.put(prefix + key + ".median", snapshot.getMedian());
-		result.put(prefix + key + ".75" + replacePercentSign,
-				snapshot.get75thPercentile());
-		result.put(prefix + key + ".95" + replacePercentSign,
-				snapshot.get95thPercentile());
-		result.put(prefix + key + ".98" + replacePercentSign,
-				snapshot.get98thPercentile());
-		result.put(prefix + key + ".99" + replacePercentSign,
-				snapshot.get99thPercentile());
-		result.put(prefix + key + ".99.9" + replacePercentSign,
-				snapshot.get999thPercentile());
-	}
-
-	@SuppressWarnings("unused")
-	private void addSnapshotJSONObject(String key, Metered meter,
-			JSONObject result) {
-		result.put(prefix + key + ".count", meter.getCount());
-		result.put(prefix + key + ".meanRate", meter.getMeanRate());
-		result.put(prefix + key + ".1-minuteRate", meter.getOneMinuteRate());
-		result.put(prefix + key + ".5-minuteRate", meter.getFiveMinuteRate());
-		result.put(prefix + key + ".15-minuteRate",
-				meter.getFifteenMinuteRate());
 	}
 
 	@SuppressWarnings("rawtypes")
@@ -261,7 +255,7 @@ public class KafkaReporter extends ScheduledReporter {
 		JSONObject gaugesJSONObject = new JSONObject();
 		for (Map.Entry<String, Gauge> entry : gauges.entrySet()) {
 			gaugesJSONObject.put(prefix + entry.getKey(), entry.getValue()
-					.getValue().toString());
+					.getValue());
 		}
 		result.put("gauges", gaugesJSONObject);
 
@@ -292,7 +286,7 @@ public class KafkaReporter extends ScheduledReporter {
 		for (Map.Entry<String, Timer> entry : timers.entrySet()) {
 			Timer timer = entry.getValue();
 			JSONObject timerJSONObjet = meterToJSONObject(timer);
-			timerJSONObjet.putAll(snapshotToJSONObject(timer.getSnapshot()));
+			timerJSONObjet.putAll(snapshotToJSONObjectWithConvertDuration(timer.getSnapshot()));
 			timersJSONObject.put(prefix + entry.getKey(), timerJSONObjet);
 		}
 		result.put("timers", timersJSONObject);
