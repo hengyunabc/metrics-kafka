@@ -249,7 +249,7 @@ public class KafkaReporter extends ScheduledReporter {
 
 		result.put("hostName", hostName);
 		result.put("ip", ip);
-		result.put("reteUnit", getRateUnit());
+		result.put("rateUnit", getRateUnit());
 		result.put("durationUnit", getDurationUnit());
 
 		JSONObject gaugesJSONObject = new JSONObject();
@@ -264,7 +264,7 @@ public class KafkaReporter extends ScheduledReporter {
 			coutersJSONObject.put(prefix + entry.getKey(), entry.getValue()
 					.getCount());
 		}
-		result.put("couters", coutersJSONObject);
+		result.put("counters", coutersJSONObject);
 
 		JSONObject histogramsJSONObject = new JSONObject();
 		for (Map.Entry<String, Histogram> entry : histograms.entrySet()) {
