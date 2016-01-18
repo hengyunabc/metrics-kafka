@@ -46,10 +46,12 @@ public class KafkaReporter extends ScheduledReporter {
 
 	int count = 0;
 
+	private LeafAppender appender;
+
 	private KafkaReporter(MetricRegistry registry, String replacePercentSign, String name,
 			TimeUnit rateUnit, TimeUnit durationUnit, MetricFilter filter,
 			String topic, ProducerConfig config, String prefix,
-			String hostName, String ip) {
+			String hostName, String ip, LeafAppender appender) {
 		super(registry, name, filter, rateUnit, durationUnit);
 		this.replacePercentSign = replacePercentSign;
 		this.topic = topic;
@@ -57,6 +59,7 @@ public class KafkaReporter extends ScheduledReporter {
 		this.prefix = prefix;
 		this.hostName = hostName;
 		this.ip = ip;
+		this.appender = appender;
 		producer = new Producer<String, String>(config);
 
 		kafkaExecutor = Executors
@@ -83,6 +86,8 @@ public class KafkaReporter extends ScheduledReporter {
 
 		private String topic;
 		private ProducerConfig config;
+		
+		private LeafAppender appender = new TrivialLeafAppender();
 
 		public Builder(MetricRegistry registry) {
 			this.registry = registry;
@@ -125,6 +130,17 @@ public class KafkaReporter extends ScheduledReporter {
 		 */
 		public Builder filter(MetricFilter filter) {
 			this.filter = filter;
+			return this;
+		}
+		
+		/**
+		 * Use leaf appender. The default appender does
+		 * not mutate the keys. 
+		 *  
+		 * @param app Appender to use, must not be null
+		 */
+		public Builder appender(LeafAppender app) {
+			this.appender = app;
 			return this;
 		}
 
@@ -185,7 +201,7 @@ public class KafkaReporter extends ScheduledReporter {
 			}
 
 			return new KafkaReporter(registry, replacePercentSign, name, rateUnit, durationUnit,
-					filter, topic, config, prefix, hostName, ip);
+					filter, topic, config, prefix, hostName, ip, appender);
 		}
 	}
 
@@ -196,16 +212,16 @@ public class KafkaReporter extends ScheduledReporter {
 	 */
 	private JSONObject snapshotToJSONObject(Snapshot snapshot) {
 		JSONObject result = new JSONObject(16);
-		result.put("min", snapshot.getMin());
-		result.put("max", snapshot.getMax());
-		result.put("mean", snapshot.getMean());
-		result.put("stddev", snapshot.getStdDev());
-		result.put("median", snapshot.getMedian());
-		result.put("75" + replacePercentSign, snapshot.get75thPercentile());
-		result.put("95" + replacePercentSign, snapshot.get95thPercentile());
-		result.put("98" + replacePercentSign, snapshot.get98thPercentile());
-		result.put("99" + replacePercentSign, snapshot.get99thPercentile());
-		result.put("99.9" + replacePercentSign, snapshot.get999thPercentile());
+		appender.append(result, "min", snapshot.getMin());
+		appender.append(result, "max", snapshot.getMax());
+		appender.append(result, "mean", snapshot.getMean());
+		appender.append(result, "stddev", snapshot.getStdDev());
+		appender.append(result, "median", snapshot.getMedian());
+		appender.append(result, "75" + replacePercentSign, snapshot.get75thPercentile());
+		appender.append(result, "95" + replacePercentSign, snapshot.get95thPercentile());
+		appender.append(result, "98" + replacePercentSign, snapshot.get98thPercentile());
+		appender.append(result, "99" + replacePercentSign, snapshot.get99thPercentile());
+		appender.append(result, "99.9" + replacePercentSign, snapshot.get999thPercentile());
 		return result;
 	}
 	
@@ -216,26 +232,26 @@ public class KafkaReporter extends ScheduledReporter {
 	 */
 	private JSONObject snapshotToJSONObjectWithConvertDuration(Snapshot snapshot) {
 		JSONObject result = new JSONObject(16);
-		result.put("min", convertDuration(snapshot.getMin()));
-		result.put("max", convertDuration(snapshot.getMax()));
-		result.put("mean", convertDuration(snapshot.getMean()));
-		result.put("stddev", convertDuration(snapshot.getStdDev()));
-		result.put("median", convertDuration(snapshot.getMedian()));
-		result.put("75" + replacePercentSign, convertDuration(snapshot.get75thPercentile()));
-		result.put("95" + replacePercentSign, convertDuration(snapshot.get95thPercentile()));
-		result.put("98" + replacePercentSign, convertDuration(snapshot.get98thPercentile()));
-		result.put("99" + replacePercentSign, convertDuration(snapshot.get99thPercentile()));
-		result.put("99.9" + replacePercentSign, convertDuration(snapshot.get999thPercentile()));
+		appender.append(result, "min", convertDuration(snapshot.getMin()));
+		appender.append(result, "max", convertDuration(snapshot.getMax()));
+		appender.append(result, "mean", convertDuration(snapshot.getMean()));
+		appender.append(result, "stddev", convertDuration(snapshot.getStdDev()));
+		appender.append(result, "median", convertDuration(snapshot.getMedian()));
+		appender.append(result, "75" + replacePercentSign, convertDuration(snapshot.get75thPercentile()));
+		appender.append(result, "95" + replacePercentSign, convertDuration(snapshot.get95thPercentile()));
+		appender.append(result, "98" + replacePercentSign, convertDuration(snapshot.get98thPercentile()));
+		appender.append(result, "99" + replacePercentSign, convertDuration(snapshot.get99thPercentile()));
+		appender.append(result, "99.9" + replacePercentSign, convertDuration(snapshot.get999thPercentile()));
 		return result;
 	}
 
 	private JSONObject meterToJSONObject(Metered meter) {
 		JSONObject result = new JSONObject(16);
-		result.put("count", meter.getCount());
-		result.put("meanRate", convertRate(meter.getMeanRate()));
-		result.put("1-minuteRate", convertRate(meter.getOneMinuteRate()));
-		result.put("5-minuteRate", convertRate(meter.getFiveMinuteRate()));
-		result.put("15-minuteRate", convertRate(meter.getFifteenMinuteRate()));
+		appender.append(result, "count", meter.getCount());
+		appender.append(result, "meanRate", convertRate(meter.getMeanRate()));
+		appender.append(result, "1-minuteRate", convertRate(meter.getOneMinuteRate()));
+		appender.append(result, "5-minuteRate", convertRate(meter.getFiveMinuteRate()));
+		appender.append(result, "15-minuteRate", convertRate(meter.getFifteenMinuteRate()));
 		return result;
 	}
 
@@ -247,51 +263,49 @@ public class KafkaReporter extends ScheduledReporter {
 			SortedMap<String, Meter> meters, SortedMap<String, Timer> timers) {
 		final JSONObject result = new JSONObject();
 
-		result.put("hostName", hostName);
-		result.put("ip", ip);
-		result.put("rateUnit", getRateUnit());
-		result.put("durationUnit", getDurationUnit());
+		appender.append(result, "hostName", hostName);
+		appender.append(result, "ip", ip);
+		appender.append(result, "rateUnit", getRateUnit());
+		appender.append(result, "durationUnit", getDurationUnit());
 
 		JSONObject gaugesJSONObject = new JSONObject();
 		for (Map.Entry<String, Gauge> entry : gauges.entrySet()) {
-			gaugesJSONObject.put(prefix + entry.getKey(), entry.getValue()
-					.getValue());
+			appender.append(gaugesJSONObject, prefix + entry.getKey(), entry.getValue().getValue());
 		}
-		result.put("gauges", gaugesJSONObject);
+		appender.append(result, "gauges", gaugesJSONObject);
 
 		JSONObject coutersJSONObject = new JSONObject();
 		for (Map.Entry<String, Counter> entry : counters.entrySet()) {
-			coutersJSONObject.put(prefix + entry.getKey(), entry.getValue()
-					.getCount());
+			appender.append(coutersJSONObject, prefix + entry.getKey(), entry.getValue());
 		}
-		result.put("counters", coutersJSONObject);
+		appender.append(result, "counters", coutersJSONObject);
 
 		JSONObject histogramsJSONObject = new JSONObject();
 		for (Map.Entry<String, Histogram> entry : histograms.entrySet()) {
 			Histogram histogram = entry.getValue();
 			Snapshot snapshot = histogram.getSnapshot();
-			histogramsJSONObject.put(prefix + entry.getKey(),
-					snapshotToJSONObject(snapshot));
+			appender.append(histogramsJSONObject, prefix + entry.getKey(), snapshotToJSONObject(snapshot));
 		}
-		result.put("histograms", histogramsJSONObject);
+		appender.append(result, "histograms", histogramsJSONObject);
 
 		JSONObject metersJSONObject = new JSONObject();
 		for (Map.Entry<String, Meter> entry : meters.entrySet()) {
-			metersJSONObject.put(prefix + entry.getKey(),
-					meterToJSONObject(entry.getValue()));
+			appender.append(metersJSONObject, prefix + entry.getKey(), meterToJSONObject(entry.getValue()));
 		}
-		result.put("meters", metersJSONObject);
+		appender.append(result, "meters", metersJSONObject);
 
 		JSONObject timersJSONObject = new JSONObject();
 		for (Map.Entry<String, Timer> entry : timers.entrySet()) {
 			Timer timer = entry.getValue();
 			JSONObject timerJSONObjet = meterToJSONObject(timer);
-			timerJSONObjet.putAll(snapshotToJSONObjectWithConvertDuration(timer.getSnapshot()));
-			timersJSONObject.put(prefix + entry.getKey(), timerJSONObjet);
+			for (Map.Entry<String, Object> subEntry: snapshotToJSONObjectWithConvertDuration(timer.getSnapshot()).entrySet()) {
+				appender.append(timerJSONObjet, subEntry.getKey(), subEntry.getValue());
+			}
+			appender.append(timersJSONObject, prefix + entry.getKey(), timerJSONObjet);
 		}
-		result.put("timers", timersJSONObject);
+		appender.append(result, "timers", timersJSONObject);
 
-		result.put("clock", System.currentTimeMillis());
+		appender.append(result, "clock", System.currentTimeMillis());
 
 		kafkaExecutor.execute(new Runnable() {
 			@Override
