@@ -1,7 +1,5 @@
 package io.github.hengyunabc.metrics;
 
-import com.alibaba.fastjson.JSONObject;
-
 /**
  * not thread safe.
  * 
@@ -11,9 +9,9 @@ import com.alibaba.fastjson.JSONObject;
 public interface MessageListener {
 
 	/**
-	 * receive zabbix message, not threadsafe.
+	 * receive metrics message, not threadsafe.
 	 * 
-	 * @param message
+	 * @param jsonStringMessage
 	 */
-	public void onMessage(JSONObject message);
+	public void onMessage(String jsonStringMessage);
 }
