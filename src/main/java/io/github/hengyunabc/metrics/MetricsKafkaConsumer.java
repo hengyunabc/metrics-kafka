@@ -15,12 +15,8 @@ import kafka.consumer.ConsumerIterator;
 import kafka.consumer.KafkaStream;
 import kafka.javaapi.consumer.ConsumerConnector;
 
-import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONObject;
-
 public class MetricsKafkaConsumer {
-	private static final Logger logger = LoggerFactory
-			.getLogger(MetricsKafkaConsumer.class);
+	private static final Logger logger = LoggerFactory.getLogger(MetricsKafkaConsumer.class);
 	String zookeeper;
 	String group;
 	String topic;
@@ -32,6 +28,8 @@ public class MetricsKafkaConsumer {
 	int autoCommitIntervalMs = 1000;
 
 	MessageListener messageListener;
+
+	ConsumerConnector consumer;
 
 	ExecutorService executor;
 
@@ -46,35 +44,30 @@ public class MetricsKafkaConsumer {
 
 		ConsumerConfig config = new ConsumerConfig(props);
 
-		ConsumerConnector consumer = kafka.consumer.Consumer
-				.createJavaConsumerConnector(config);
+		consumer = kafka.consumer.Consumer.createJavaConsumerConnector(config);
 
 		Map<String, Integer> topicCountMap = new HashMap<String, Integer>();
 		topicCountMap.put(topic, threadNumber);
-		Map<String, List<KafkaStream<byte[], byte[]>>> consumerMap = consumer
-				.createMessageStreams(topicCountMap);
+		Map<String, List<KafkaStream<byte[], byte[]>>> consumerMap = consumer.createMessageStreams(topicCountMap);
 		List<KafkaStream<byte[], byte[]>> streams = consumerMap.get(topic);
 
 		// now launch all the threads
 		//
-		executor = Executors.newFixedThreadPool(
-				threadNumber,
-				new ThreadFactoryBuilder().setNameFormat(
-						"kafka-zabbixconsumer-%d").build());
+		executor = Executors.newFixedThreadPool(threadNumber,
+				new ThreadFactoryBuilder().setNameFormat("kafka-metrics-consumer-%d").build());
 
 		for (final KafkaStream stream : streams) {
 			executor.submit(new Runnable() {
 				@SuppressWarnings("unchecked")
 				@Override
 				public void run() {
-					
+
 					ConsumerIterator<byte[], byte[]> it = stream.iterator();
 					while (it.hasNext()) {
 						try {
-							messageListener.onMessage((JSONObject) JSON.parse(it
-									.next().message()));
+							messageListener.onMessage(new String(it.next().message()));
 						} catch (RuntimeException e) {
-							logger.error("consumer kafka zabbix message error!", e);
+							logger.error("consumer kafka metrics message error!", e);
 						}
 					}
 				}
@@ -84,8 +77,14 @@ public class MetricsKafkaConsumer {
 	}
 
 	public void desotry() {
-		if(executor != null){
-			executor.shutdown();
+		try {
+			if (consumer != null) {
+				consumer.shutdown();
+			}
+		} finally {
+			if (executor != null) {
+				executor.shutdown();
+			}
 		}
 	}
 
