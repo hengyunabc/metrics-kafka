@@ -312,12 +312,26 @@ public class MetricsKafkaConsumerSample {
 }
 ```
 
-## Link
+## Maven dependency
+
+```xml
+<dependency>
+    <groupId>io.github.hengyunabc</groupId>
+    <artifactId>metrics-kafka</artifactId>
+    <version>0.0.1</version>
+</dependency>
+```
+
+## Others
 
 https://github.com/hengyunabc/zabbix-api
 
+https://github.com/hengyunabc/zabbix-sender
+
+https://github.com/hengyunabc/metrics-zabbix
+
 https://github.com/hengyunabc/kafka-zabbix
 
-## Licence
+## License
 
 Apache License V2
