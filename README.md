@@ -311,6 +311,32 @@ public class MetricsKafkaConsumerSample {
 	}
 }
 ```
+## Reporter with pointTag support
+You can also use WavefrontKafkaReporter which you can append 'pointTags' to the reporting metrics. PointTag specifies additional information using key value pair. See below example where withPointTag() method is used to specify two pontTags, cluster and appName to further specify which cluster and which app this metric is being originated.
+
+```
+WavefrontKafkaReporter wavefrontKafkaReporter = WavefrontKafkaReporter.forRegistry(metrics).config(config).topic(topic).hostName(hostName).prefix(prefix).withPointTag("cluster", "c-1").withPointTag("appName", "myapp").build();
+```
+You can additionally provide Map<String, String> to provide multiple point tags in single method.
+```
+Map<String, String> pointTags = new HashMap<String, String>();
+pointTags.put("cluster","c-1");
+pointTags.put("appName","myapp");
+
+WavefrontKafkaReporter wavefrontKafkaReporter = WavefrontKafkaReporter.forRegistry(metrics).config(config).topic(topic).hostName(hostName).prefix(prefix).withPointTag(pointTags).build();
+
+```
+
+The resulting JSON output will contain the following additional object map in its message as shown below:
+```
+{
+  ...
+  "pointTags":{  
+      "appName":"myapp",
+      "cluster":"c-1"
+   }
+}
+```
 
 ## Maven dependency
 
