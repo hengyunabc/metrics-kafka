@@ -1,95 +1,10 @@
-# metrics-kafka
-Dropwizard Metrics reporter for kafka.
+# example of converting dropwizard metrics json into wavefront data for proxy.
+# supporting point tags in the message payload
+# howard yoo 2017.12.4
+import json
 
-
-https://github.com/dropwizard/metrics
-
-Report json metrics data to kafka. Kafka comsumer can process metrics data.
-
-
-## Example
-
-### Environment Setup
-
-http://kafka.apache.org/082/documentation.html#quickstart
-
-### Reporter
-
-```java
-import java.io.IOException;
-import java.util.Properties;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.concurrent.TimeUnit;
-
-import com.codahale.metrics.ConsoleReporter;
-import com.codahale.metrics.Histogram;
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer.Context;
-import com.codahale.metrics.jvm.GarbageCollectorMetricSet;
-import com.codahale.metrics.jvm.MemoryUsageGaugeSet;
-
-import io.github.hengyunabc.metrics.KafkaReporter;
-import kafka.producer.ProducerConfig;
-
-public class KafkaReporterSample {
-	static final MetricRegistry metrics = new MetricRegistry();
-	static public Timer timer = new Timer();
-
-	public static void main(String args[]) throws IOException,
-			InterruptedException {
-		ConsoleReporter reporter = ConsoleReporter.forRegistry(metrics)
-				.convertRatesTo(TimeUnit.SECONDS)
-				.convertDurationsTo(TimeUnit.MILLISECONDS).build();
-		metrics.register("jvm.mem", new MemoryUsageGaugeSet());
-		metrics.register("jvm.gc", new GarbageCollectorMetricSet());
-
-		final Histogram responseSizes = metrics.histogram("response-sizes");
-		final com.codahale.metrics.Timer metricsTimer = metrics
-				.timer("test-timer");
-
-		timer.schedule(new TimerTask() {
-			int i = 100;
-
-			@Override
-			public void run() {
-				Context context = metricsTimer.time();
-				try {
-					TimeUnit.MILLISECONDS.sleep(500);
-				} catch (InterruptedException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
-				responseSizes.update(i++);
-				context.stop();
-			}
-
-		}, 1000, 1000);
-
-		reporter.start(5, TimeUnit.SECONDS);
-
-		String hostName = "localhost";
-		String topic = "test-kafka-reporter";
-		Properties props = new Properties();
-		props.put("metadata.broker.list", "127.0.0.1:9092");
-		props.put("serializer.class", "kafka.serializer.StringEncoder");
-		props.put("partitioner.class", "kafka.producer.DefaultPartitioner");
-		props.put("request.required.acks", "1");
-
-		String prefix = "test.";
-		ProducerConfig config = new ProducerConfig(props);
-		KafkaReporter kafkaReporter = KafkaReporter.forRegistry(metrics)
-				.config(config).topic(topic).hostName(hostName).prefix(prefix).build();
-
-		kafkaReporter.start(1, TimeUnit.SECONDS);
-
-		TimeUnit.SECONDS.sleep(500);
-	}
-}
-```
-
-The json send to kafka will like this:
-```json
+# example json string to parse.
+json_string = """
 {
     "timers": {
         "test.test-timer": {
@@ -264,100 +179,136 @@ The json send to kafka will like this:
             "value": 0.12634142362154446
         }
     },
-    "ip": "192.158.1.113"
-}
-```
-
-### KafkaConsumer
-
-```java
-import java.io.IOException;
-
-import io.github.hengyunabc.metrics.MessageListener;
-import io.github.hengyunabc.metrics.MetricsKafkaConsumer;
-
-public class MetricsKafkaConsumerSample {
-
-	String zookeeper;
-	String topic;
-	String group;
-
-	MetricsKafkaConsumer consumer;
-
-	public static void main(String[] args) throws IOException {
-
-		String zookeeper = "localhost:2181";
-		String topic = "test-kafka-reporter";
-		String group = "consumer-test";
-
-		MetricsKafkaConsumer consumer = new MetricsKafkaConsumer();
-
-		consumer = new MetricsKafkaConsumer();
-		consumer.setZookeeper(zookeeper);
-		consumer.setTopic(topic);
-		consumer.setGroup(group);
-		consumer.setMessageListener(new MessageListener() {
-
-			@Override
-			public void onMessage(String message) {
-				System.err.println(message);
-			}
-		});
-		consumer.init();
-
-		System.in.read();
-
-		consumer.desotry();
-	}
-}
-```
-## Reporter with pointTag support
-You can also use WavefrontKafkaReporter which you can append 'pointTags' to the reporting metrics. PointTag specifies additional information using key value pair. See below example where withPointTag() method is used to specify two pontTags, cluster and appName to further specify which cluster and which app this metric is being originated.
-
-```
-WavefrontKafkaReporter wavefrontKafkaReporter = WavefrontKafkaReporter.forRegistry(metrics).config(config).topic(topic).hostName(hostName).prefix(prefix).withPointTag("cluster", "c-1").withPointTag("appName", "myapp").build();
-```
-You can additionally provide Map<String, String> to provide multiple point tags in single method.
-```
-Map<String, String> pointTags = new HashMap<String, String>();
-pointTags.put("cluster","c-1");
-pointTags.put("appName","myapp");
-
-WavefrontKafkaReporter wavefrontKafkaReporter = WavefrontKafkaReporter.forRegistry(metrics).config(config).topic(topic).hostName(hostName).prefix(prefix).withPointTag(pointTags).build();
-
-```
-
-The resulting JSON output will contain the following additional object map in its message as shown below:
-```
-{
-  ...
-  "pointTags":{  
+    "ip": "192.158.1.113",
+    "pointTags":{  
       "appName":"myapp",
       "cluster":"c-1"
    }
 }
-```
+"""
 
-## Maven dependency
+def merge_two_dicts(x, y):
+	z = x.copy()
+	z.update(y)
+	return z
 
-```xml
-<dependency>
-    <groupId>io.github.hengyunabc</groupId>
-    <artifactId>metrics-kafka</artifactId>
-    <version>0.0.1</version>
-</dependency>
-```
+def convertTimer(a_timer):
+	if a_timer is None:
+		return ""
+	
+	m_map = {}
+	l_pointTag = {}
+	s = ""
 
-## Others
+	for key in a_timer:
+		values = a_timer[key]
+		for value in values:
+			v = values[value];
+			if type(v).__name__ == "str" or type(v).__name__ == "unicode":
+				l_pointTag[value] = v
+			else:
+				m_map[key + "." + value] = values[value];
 
-https://github.com/hengyunabc/zabbix-api
+	m_pointTag = merge_two_dicts(g_pointTag, l_pointTag)
 
-https://github.com/hengyunabc/zabbix-sender
+	# now, print out all the metrics along with merged local and global pointtags
+	for mname in m_map:
+		s += toWavefrontData(mname, str(m_map[mname]), source, str(clock), m_pointTag) + "\n"
 
-https://github.com/hengyunabc/metrics-zabbix
+	return s
 
-https://github.com/hengyunabc/kafka-zabbix
+def convertGauge(a_gauge):
+	if a_gauge is None:
+		return ""
 
-## License
+	s = ""
+	for key in a_gauge:
+		s += toWavefrontData(key, str(a_gauge[key]["value"]), source, str(clock), g_pointTag) + "\n"
+	return s
 
-Apache License V2
+def convertCounter(a_counter):
+	if a_counter is None:
+		return ""
+
+	s = ""
+	for key in a_counter:
+		s += toWavefrontData(key, str(a_counter[key]["count"]), source, str(clock), g_pointTag) + "\n"
+	return s
+
+def convertHistogram(a_histogram):
+	if a_histogram is None:
+		return ""
+
+	s = ""
+	for key in a_histogram:
+		values = a_histogram[key]
+		for value in values:
+			s += toWavefrontData(key + "." + value, str(values[value]), source, str(clock), g_pointTag) + "\n"
+	return s
+
+
+def pointTagsToStr(pointTags):
+	s = ""
+	for key in pointTags:
+		s += " "
+		s += key
+		s += "="
+		s += "\"" + pointTags[key] + "\""
+	return s
+
+def toWavefrontData(metricName, value, source, timestamp, pointTags):
+	s = ""
+	if metricName != "":
+		if value != "":
+			if source != "":
+				s += metricName + " " + value
+				if timestamp != "":
+					s += " " + timestamp
+				s += " source=\"" + source + "\""
+				if pointTags is not None:
+					s += pointTagsToStr(pointTags)
+	return s
+
+def convertMetricsToWavefront(jsondata):
+	s = ""
+	s += convertTimer(jsondata['timers'])
+	s += convertHistogram(jsondata['histograms'])
+	s += convertCounter(jsondata['counters'])
+	s += convertGauge(jsondata['gauges'])
+	return s
+
+# --------------- MAIN CODE ------------------
+
+# parse the json into json object
+jsondata = json.loads(json_string)
+
+# collect the following global parameters
+ip = jsondata['ip']
+hostname = jsondata['hostName']
+clock = jsondata['clock']
+rateUnit = jsondata['rateUnit']
+durationUnit = jsondata['durationUnit']
+
+# define source. if localhost is the hostname, use ip instead
+source = hostname
+if source == "localhost":
+	source = ip
+
+# global point tag
+g_pointTag = {}
+
+# if point tags exist, use it.
+if 'pointTags' in jsondata:
+    g_pointTag = jsondata['pointTags']
+
+# append additional point tags
+g_pointTag["rateUnit"] = str(rateUnit)
+g_pointTag["durationUnit"] = str(durationUnit)
+
+# main convert function
+print(convertMetricsToWavefront(jsondata))
+
+print "--- end ---"
+
+# end
+
